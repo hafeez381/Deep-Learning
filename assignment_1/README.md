@@ -38,8 +38,7 @@ assignment_1/
 │   ├── train.csv
 │   └── test.csv
 ├── docs/
-│   ├── AI600 - Assignment 1.pdf      # Assignment prompt
-│   └── Assignment 1 Report.pdf       # Final report
+│   └── AI600 - Assignment 1.pdf      # Assignment prompt
 ├── notebooks/
 │   └── mlp.ipynb                     # EDA, training, and analysis notebook
 ├── outputs/
