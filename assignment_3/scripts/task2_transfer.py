@@ -171,20 +171,24 @@ def run_gradcam():
     correct_samples = []
     incorrect_samples = []
 
-    for idx in range(len(test_set)):
-        if len(correct_samples) >= 2 and len(incorrect_samples) >= 2:
-            break
+    # Step 1 — collect samples using no_grad (just need predictions)
+    with torch.no_grad():
+        for idx in range(len(test_set)):
+            if len(correct_samples) >= 2 and len(incorrect_samples) >= 2:
+                break
 
-        image, true_label = test_set[idx]
-        input_tensor = image.unsqueeze(0).to(DEVICE)
+            image, true_label = test_set[idx]
+            input_tensor = image.unsqueeze(0).to(DEVICE)
+            pred_label   = model(input_tensor).argmax(dim=1).item()
 
-        with torch.no_grad():
-            pred_label = model(input_tensor).argmax(dim=1).item()
+            if pred_label == true_label and len(correct_samples) < 2:
+                correct_samples.append((image, true_label, pred_label))
+            elif pred_label != true_label and len(incorrect_samples) < 2:
+                incorrect_samples.append((image, true_label, pred_label))
 
-        if pred_label == true_label and len(correct_samples) < 2:
-            correct_samples.append((image, true_label, pred_label))
-        elif pred_label != true_label and len(incorrect_samples) < 2:
-            incorrect_samples.append((image, true_label, pred_label))
+    # Step 2 — GradCAM generation happens outside no_grad (gradients needed)
+    all_samples = correct_samples + incorrect_samples
+    labels      = ['Correct', 'Correct', 'Incorrect', 'Incorrect']
 
     all_samples = correct_samples + incorrect_samples
     labels      = ['Correct', 'Correct', 'Incorrect', 'Incorrect']
