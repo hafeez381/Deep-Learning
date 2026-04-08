@@ -100,7 +100,8 @@ class GradCAM:
         self.gradients    = None
 
         # Forward hook — saves the output feature map of target_layer
-        target_layer.register_forward_hook(self._save_activation)
+        target_layer.register_backward_hook(self._save_gradient)
+
         # Backward hook — saves the gradient flowing into target_layer
         target_layer.register_full_backward_hook(self._save_gradient)
 
