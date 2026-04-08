@@ -29,7 +29,7 @@ def train_one_epoch(model, loader, criterion, optimizer, DEVICE, scheduler=None)
         correct += predicted.eq(labels).sum().item()
 
     train_loss = running_loss/ len(loader)
-    train_acc = 100. * correct / total
+    train_acc = 100.0 * correct / total
 
     return train_loss, train_acc
 
