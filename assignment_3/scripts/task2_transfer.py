@@ -90,51 +90,32 @@ def run_train():
 
 
 class GradCAM:
-    """
-    GradCAM implementation for ResNet-18.
-    Hooks into the target layer to capture activations and gradients.
-    """
     def __init__(self, model, target_layer):
-        self.model        = model
-        self.activations  = None
-        self.gradients    = None
+        self.model       = model
+        self.activations = None
 
-        # Forward hook — saves the output feature map of target_layer
-        target_layer.register_backward_hook(self._save_gradient)
-
-        # Backward hook — saves the gradient flowing into target_layer
-        target_layer.register_full_backward_hook(self._save_gradient)
+        target_layer.register_forward_hook(self._save_activation)
 
     def _save_activation(self, module, input, output):
-        self.activations = output.detach()
-
-    def _save_gradient(self, module, grad_input, grad_output):
-        self.gradients = grad_output[0].detach()
+        self.activations = output
+        self.activations.retain_grad()
 
     def generate(self, input_tensor, class_idx=None):
-        """
-        Returns a [H, W] numpy heatmap for the given input.
-        If class_idx is None, uses the predicted class.
-        """
         self.model.eval()
+
         output = self.model(input_tensor)
 
         if class_idx is None:
             class_idx = output.argmax(dim=1).item()
 
-        # Zero gradients and backpropagate for the target class score
         self.model.zero_grad()
         output[0, class_idx].backward()
 
-        # Global average pool the gradients over spatial dimensions
-        weights = self.gradients.mean(dim=(2, 3), keepdim=True)  # [1, C, 1, 1]
+        weights = self.activations.grad.mean(dim=(2, 3), keepdim=True)
+        cam     = (weights * self.activations).sum(dim=1, keepdim=True)
+        cam     = torch.relu(cam)
+        cam     = cam.squeeze().detach().cpu().numpy()
 
-        # Weighted combination of activation maps
-        cam = (weights * self.activations).sum(dim=1, keepdim=True)  # [1, 1, H, W]
-        cam = torch.relu(cam)
-        cam = cam.squeeze().cpu().numpy()
-
-        # Normalize to [0, 1]
         cam -= cam.min()
         if cam.max() > 0:
             cam /= cam.max()
