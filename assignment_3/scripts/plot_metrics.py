@@ -143,11 +143,46 @@ def plot_task_2():
     metrics_path = os.path.join(RESULTS_DIR, "task2_stl10_metrics.json")
     metrics      = load_metrics(metrics_path)
 
-    plot_curves(
-        metrics,
-        title     = f"Task 2 — ResNet-18 STL-10 | Test Acc: {metrics['test_acc']:.2f}%",
-        save_path = os.path.join(FIGURES_DIR, "task2_stl10_curves.png")
+    # Rename keys for display so legend reads "Test" not "Validation"
+    display_metrics = {
+        "train_loss": metrics["train_loss"],
+        "train_acc":  metrics["train_acc"],
+        "val_loss":   metrics["val_loss"],   # actually test loss
+        "val_acc":    metrics["val_acc"],    # actually test acc
+    }
+
+    epochs = range(1, len(display_metrics["train_loss"]) + 1)
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    fig.suptitle(
+        f"Task 2 — ResNet-18 on STL-10 | Test Acc: {metrics['test_acc']:.2f}%",
+        fontsize=13, fontweight="bold"
     )
+
+    axes[0].plot(epochs, display_metrics["train_loss"],
+                 label="Train", marker="o", linewidth=2)
+    axes[0].plot(epochs, display_metrics["val_loss"],
+                 label="Test", marker="o", linewidth=2, linestyle="--")
+    axes[0].set_title("Cross-Entropy Loss")
+    axes[0].set_xlabel("Epoch")
+    axes[0].set_ylabel("Loss")
+    axes[0].legend()
+    axes[0].grid(True, linestyle="--", alpha=0.6)
+
+    axes[1].plot(epochs, display_metrics["train_acc"],
+                 label="Train", marker="o", linewidth=2)
+    axes[1].plot(epochs, display_metrics["val_acc"],
+                 label="Test", marker="o", linewidth=2, linestyle="--")
+    axes[1].set_title("Classification Accuracy")
+    axes[1].set_xlabel("Epoch")
+    axes[1].set_ylabel("Accuracy (%)")
+    axes[1].legend()
+    axes[1].grid(True, linestyle="--", alpha=0.6)
+
+    plt.tight_layout()
+    save_path = os.path.join(FIGURES_DIR, "task2_stl10_curves.png")
+    plt.savefig(save_path, dpi=300, bbox_inches="tight")
+    plt.close()
+    print(f"Saved to {save_path}")
 
 
 def parse_args():
