@@ -27,11 +27,8 @@ FIGURES_DIR = os.path.join(BASE_DIR, "figures")
 for d in [MODELS_DIR, RESULTS_DIR, FIGURES_DIR]:
     os.makedirs(d, exist_ok=True)
 
-DEVICE = (
-    torch.device("mps")  if torch.backends.mps.is_available() else
-    torch.device("cuda") if torch.cuda.is_available() else
-    torch.device("cpu")
-)
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 EPOCHS = 10
 BATCH_SIZE = 64
