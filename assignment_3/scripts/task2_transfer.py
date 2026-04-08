@@ -98,11 +98,13 @@ class GradCAM:
 
     def _save_activation(self, module, input, output):
         self.activations = output
-        self.activations.retain_grad()
+        if output.requires_grad:
+            self.activations.retain_grad()
 
     def generate(self, input_tensor, class_idx=None):
         self.model.eval()
 
+        input_tensor = input_tensor.requires_grad_(True)
         output = self.model(input_tensor)
 
         if class_idx is None:
@@ -126,17 +128,12 @@ class GradCAM:
 def run_gradcam():
     print(f"Using device: {DEVICE}")
 
-    # Load model
     weights_path = os.path.join(MODELS_DIR, "resnet18_stl10.pth")
     model = FineTunedResNet18(num_classes=10).to(DEVICE)
     model.load_state_dict(
         torch.load(weights_path, map_location=DEVICE, weights_only=True)
     )
     model.eval()
-
-    # Hook into layer4 (final conv block of ResNet-18)
-    target_layer = model.model.layer4[-1]
-    gradcam      = GradCAM(model, target_layer)
 
     transform = transforms.Compose([
         transforms.Resize((224, 224)),
@@ -147,13 +144,13 @@ def run_gradcam():
         )
     ])
 
-    test_set = datasets.STL10(root=DATA_DIR, split='test', download=False, transform=transform)
+    test_set = datasets.STL10(root=DATA_DIR, split='test',
+                              download=True, transform=transform)
 
-    # Collect 2 correct and 2 incorrect predictions
-    correct_samples = []
+    # ── Step 1: collect samples under no_grad (no hook yet) ──────────────────
+    correct_samples   = []
     incorrect_samples = []
 
-    # Step 1 — collect samples using no_grad (just need predictions)
     with torch.no_grad():
         for idx in range(len(test_set)):
             if len(correct_samples) >= 2 and len(incorrect_samples) >= 2:
@@ -168,35 +165,29 @@ def run_gradcam():
             elif pred_label != true_label and len(incorrect_samples) < 2:
                 incorrect_samples.append((image, true_label, pred_label))
 
-    # Step 2 — GradCAM generation happens outside no_grad (gradients needed)
+    # ── Step 2: register hook AFTER no_grad block ─────────────────────────────
+    target_layer = model.model.layer4[-1]
+    gradcam      = GradCAM(model, target_layer)
+
+    # ── Step 3: generate CAMs (gradients enabled) ─────────────────────────────
     all_samples = correct_samples + incorrect_samples
     labels      = ['Correct', 'Correct', 'Incorrect', 'Incorrect']
 
-    all_samples = correct_samples + incorrect_samples
-    labels      = ['Correct', 'Correct', 'Incorrect', 'Incorrect']
+    mean = np.array([0.485, 0.456, 0.406])
+    std  = np.array([0.229, 0.224, 0.225])
 
-    # Plot 4 GradCAM overlays in a single figure
     fig, axes = plt.subplots(2, 4, figsize=(18, 9))
     fig.suptitle("GradCAM Visualizations — Fine-tuned ResNet-18 on STL-10",
                  fontsize=14, fontweight="bold")
 
-    # ImageNet denormalization for display
-    mean = np.array([0.485, 0.456, 0.406])
-    std  = np.array([0.229, 0.224, 0.225])
-
     for col, (image, true_label, pred_label) in enumerate(all_samples):
         input_tensor = image.unsqueeze(0).to(DEVICE)
+        cam, _       = gradcam.generate(input_tensor, class_idx=pred_label)
 
-        # Enable grad for GradCAM
-        input_tensor.requires_grad_(False)
-        cam, _ = gradcam.generate(input_tensor, class_idx=pred_label)
-
-        # Denormalize image for display
         img_np = image.permute(1, 2, 0).numpy()
         img_np = std * img_np + mean
         img_np = np.clip(img_np, 0, 1)
 
-        # Resize CAM to image size
         cam_resized = np.array(
             PILImage.fromarray((cam * 255).astype(np.uint8)).resize(
                 (img_np.shape[1], img_np.shape[0]),
@@ -205,16 +196,14 @@ def run_gradcam():
         ) / 255.0
 
         result = labels[col]
-        title = (f"{result}\nTrue: {STL10_CLASSES[true_label]}\n"
-                 f"Pred: {STL10_CLASSES[pred_label]}")
-        color = "green" if result == "Correct" else "red"
+        title  = (f"{result}\nTrue: {STL10_CLASSES[true_label]}\n"
+                  f"Pred: {STL10_CLASSES[pred_label]}")
+        color  = "green" if result == "Correct" else "red"
 
-        # Row 0: original image
         axes[0, col].imshow(img_np)
         axes[0, col].set_title(title, fontsize=9, color=color, fontweight="bold")
         axes[0, col].axis("off")
 
-        # Row 1: GradCAM overlay
         axes[1, col].imshow(img_np)
         axes[1, col].imshow(cam_resized, cmap="jet", alpha=0.45)
         axes[1, col].set_title("GradCAM Heatmap", fontsize=9)
